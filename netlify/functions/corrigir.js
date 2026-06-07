@@ -4,8 +4,6 @@ exports.handler = async (event) => {
   }
 
   const apiKey = process.env.GROQ_API_KEY;
-  console.log('API Key exists:', !!apiKey);
-  console.log('API Key prefix:', apiKey ? apiKey.substring(0, 10) : 'none');
 
   let body;
   try {
@@ -14,7 +12,7 @@ exports.handler = async (event) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
   }
 
-  const { theme, essay, mode } = body;
+  const { theme, essay } = body;
 
   const prompt = `Você é corretor do ENEM. Avalie nas 5 competências de 0 a 200 (múltiplos de 40). Retorne SOMENTE JSON sem texto antes ou depois:
 {"competencias":[{"nome":"Competência I","desc":"Domínio da norma culta","nota":160,"nivel":"alta","feedback":"texto"},{"nome":"Competência II","desc":"Compreensão do tema","nota":120,"nivel":"media","feedback":"texto"},{"nome":"Competência III","desc":"Organização","nota":160,"nivel":"alta","feedback":"texto"},{"nome":"Competência IV","desc":"Coesão e coerência","nota":120,"nivel":"media","feedback":"texto"},{"nome":"Competência V","desc":"Proposta de intervenção","nota":80,"nivel":"baixa","feedback":"texto"}]}
@@ -23,7 +21,6 @@ Tema: ${theme || 'não informado'}
 Redação: ${essay || 'não fornecida'}`;
 
   try {
-    console.log('Calling Groq API...');
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -31,18 +28,15 @@ Redação: ${essay || 'não fornecida'}`;
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: 'llama3-70b-8192',
+        model: 'llama-3.3-70b-versatile',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.3
       })
     });
 
-    console.log('Groq response status:', response.status);
     const data = await response.json();
-    console.log('Groq response:', JSON.stringify(data).substring(0, 200));
 
     if (data.error) {
-      console.log('Groq error:', data.error.message);
       return { statusCode: 500, body: JSON.stringify({ error: data.error.message }) };
     }
 
@@ -57,7 +51,6 @@ Redação: ${essay || 'não fornecida'}`;
       body: JSON.stringify(parsed)
     };
   } catch (err) {
-    console.log('ERRO:', err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
