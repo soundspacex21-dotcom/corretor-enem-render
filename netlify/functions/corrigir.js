@@ -1,8 +1,20 @@
 exports.handler = async (event) => {
-  if (event.httpMethod !== 'POST') return { statusCode: 405, body: 'Method not allowed' };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, body: 'Method not allowed' };
+  }
 
-  const { theme, essay, mode } = JSON.parse(event.body);
   const apiKey = process.env.GROQ_API_KEY;
+  console.log('API Key exists:', !!apiKey);
+  console.log('API Key prefix:', apiKey ? apiKey.substring(0, 10) : 'none');
+
+  let body;
+  try {
+    body = JSON.parse(event.body);
+  } catch (e) {
+    return { statusCode: 400, body: JSON.stringify({ error: 'Invalid JSON' }) };
+  }
+
+  const { theme, essay, mode } = body;
 
   const prompt = `Você é corretor do ENEM. Avalie nas 5 competências de 0 a 200 (múltiplos de 40). Retorne SOMENTE JSON sem texto antes ou depois:
 {"competencias":[{"nome":"Competência I","desc":"Domínio da norma culta","nota":160,"nivel":"alta","feedback":"texto"},{"nome":"Competência II","desc":"Compreensão do tema","nota":120,"nivel":"media","feedback":"texto"},{"nome":"Competência III","desc":"Organização","nota":160,"nivel":"alta","feedback":"texto"},{"nome":"Competência IV","desc":"Coesão e coerência","nota":120,"nivel":"media","feedback":"texto"},{"nome":"Competência V","desc":"Proposta de intervenção","nota":80,"nivel":"baixa","feedback":"texto"}]}
@@ -11,19 +23,41 @@ Tema: ${theme || 'não informado'}
 Redação: ${essay || 'não fornecida'}`;
 
   try {
+    console.log('Calling Groq API...');
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: 'llama3-70b-8192', messages: [{ role: 'user', content: prompt }], temperature: 0.3 })
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'llama3-70b-8192',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3
+      })
     });
+
+    console.log('Groq response status:', response.status);
     const data = await response.json();
-    if (data.error) return { statusCode: 500, body: JSON.stringify({ error: data.error.message }) };
+    console.log('Groq response:', JSON.stringify(data).substring(0, 200));
+
+    if (data.error) {
+      console.log('Groq error:', data.error.message);
+      return { statusCode: 500, body: JSON.stringify({ error: data.error.message }) };
+    }
+
     const text = data.choices[0].message.content;
     const clean = text.replace(/```json|```/g, '').trim();
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
-    return { statusCode: 200, headers: { 'Content-Type': 'application/json' }, body: clean.substring(start, end + 1) };
+    const parsed = JSON.parse(clean.substring(start, end + 1));
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parsed)
+    };
   } catch (err) {
+    console.log('ERRO:', err.message);
     return { statusCode: 500, body: JSON.stringify({ error: err.message }) };
   }
 };
